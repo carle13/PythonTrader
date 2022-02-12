@@ -348,3 +348,11 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+# Sensitive information
+config.py
+
+# Tests
+test.py
+test.ipynb
+testdata.npy
