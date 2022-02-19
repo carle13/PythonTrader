@@ -63,6 +63,9 @@ def plotBase(market, ax):
 	if market not in dataHistoDict or market not in lastPrices:
 		return
 	ax.plot(dataHistoDict[market][0], dataHistoDict[market][1], label='Last Price')
+	ax.plot(dataHistoDict[market][0][shortPeriod-1:], shortAverage[market], label='Short Average')
+	ax.plot(dataHistoDict[market][0][mediumPeriod-1:], mediumAverage[market], label='Medium Average')
+	ax.plot(dataHistoDict[market][0][longPeriod-1:], longAverage[market], label='Long Average')
 	if market not in dataTrans:
 		return
 	buy = [[], []]
@@ -86,6 +89,10 @@ transactionsCancelled = 0
 currentTime = 0.0
 
 ordersCheck = []
+
+shortPeriod = 2
+mediumPeriod = 10
+longPeriod = 20
 
 threadLock = threading.Lock()
 
@@ -134,10 +141,16 @@ except:
 
 # Read historical prices for the currencies
 dataHistoDict = dict()
+shortAverage = dict()
+mediumAverage = dict()
+longAverage = dict()
 for i in range(len(euroPairs)):
 	market = euroPairs[i]['id']
 	try:
 		dataHistoDict[market] = np.load('CoinbaseTrade/HistoricalData/historical' + market + '.npy', allow_pickle=True)
+		shortAverage[market] = common.calculate_ema(dataHistoDict[market][1], shortPeriod)
+		mediumAverage[market] = common.calculate_ema(dataHistoDict[market][1], mediumPeriod)
+		longAverage[market] = common.calculate_ema(dataHistoDict[market][1], longPeriod)
 	except:
 		print('New market: ' + market)
 
@@ -182,13 +195,15 @@ class coinThread(threading.Thread):
 		global transactionsDone
 		global my_accounts
 		global lastPrices
-		global purchasePrice
 		global buyAllowed
 		global dataHistoDict
 		global spreadCurrencies
 		global changeLastPurchase
 		global changeLastPrice
 		global dataTrans
+		global shortAverage
+		global mediumAverage
+		global longAverage
 		market = self.name
 		# Get lock to synchronize threads
 		threadLock.acquire()
@@ -233,6 +248,9 @@ class coinThread(threading.Thread):
 			dataHistoDict[market] = np.array([np.array([currentTime]), np.array([lastPrices[market]])], dtype=object)
 		else:
 			dataHistoDict[market] = [np.append(dataHistoDict[market][0], currentTime), np.append(dataHistoDict[market][1], lastPrices[market])]
+		shortAverage[market] = common.calculate_ema(dataHistoDict[market][1], shortPeriod)
+		mediumAverage[market] = common.calculate_ema(dataHistoDict[market][1], mediumPeriod)
+		longAverage[market] = common.calculate_ema(dataHistoDict[market][1], longPeriod)
 
 		# Get change since last purchase
 		changeLastPurchase[market] = ((lastPrices[market] - dataTrans[market][1][0]) / dataTrans[market][1][0]) * 100.0
@@ -257,83 +275,89 @@ class coinThread(threading.Thread):
 		spreadCurrencies[market] = (abs(float(sp['bids'][0][0]) - float(sp['asks'][0][0])) / lastPrices[market]) * 100
 
 		# check that is not a low fluidity pair
-		if spreadCurrencies[market] >= 0.05:
+		if spreadCurrencies[market] >= 0.5:
 			threadLock.release()
 			return
 
-		# # If market goes up sell
-		# if changeLastPurchase[market] > 5.0 and changeLastPrice[market] < 0.1:
-		# 	baseAsset = euroPairs[indexMarket[market]]['base_currency']
+		# check that there is continuous data
+		if dataHistoDict[market][0][-1] - dataHistoDict[market][0][-21] > 21:
+			print('Insufficient data to trade: ' + market)
+			threadLock.release()
+			return
 
-		# 	if not baseAsset in indexCurrency:
-		# 		print('Currency not available: ' + market)
-		# 		threadLock.release()
-		# 		return
+		# If market goes up sell
+		if mediumAverage[market][-1] > shortAverage[market][-1] and mediumAverage[market][-2] <= shortAverage[market][-2] and not buyAllowed[market]:
+			baseAsset = euroPairs[indexMarket[market]]['base_currency']
 
-		# 	available = float(my_accounts[indexCurrency[baseAsset]]['available'])
+			if not baseAsset in indexCurrency:
+				print('Currency not available: ' + market)
+				threadLock.release()
+				return
 
-		# 	if available != 0.0:
-		# 		# Create sell market order
-		# 		print('Selling: ' + market + ' ____ Amount: ' + str(available))
-		# 		try:
-		# 			new_sell_market_order = auth_client.place_market_order(product_id=market, side='sell', size=np.format_float_positional(available))
-		# 			print(new_sell_market_order['status'])
-		# 			if new_sell_market_order['status'] == 'done':
-		# 				purchasePrice[market] = lastPrices[market]
-		# 				buyAllowed[market] = True
-		# 				# Add successful tradde
-		# 				transactionsDone += 1
-		# 				print(new_sell_market_order['status'])
-		# 			else:
-		# 				ordersCheck.append(new_sell_market_order['id'])
-		# 				print(new_sell_market_order['status'])
-		# 		except Exception as inst:
-		# 			# Free lock to release next thread
-		# 			print(inst)
-		# 			threadLock.release()
-		# 			return
+			available = float(my_accounts[indexCurrency[baseAsset]]['available'])
 
-		# 	else:
-		# 		# Unsuccessful trade
-		# 		transactionsAttempted += 1
+			if available != 0.0:
+				# Create sell market order
+				print('Selling: ' + market + ' ____ Amount: ' + str(available))
+				try:
+					new_sell_market_order = auth_client.place_market_order(product_id=market, side='sell', size=np.format_float_positional(available))
+					print(new_sell_market_order['status'])
+					if new_sell_market_order['status'] == 'done':
+						dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], lastPrices[market]), np.append(dataTrans[market][2], 's')]
+						buyAllowed[market] = True
+						# Add successful tradde
+						transactionsDone += 1
+						print(new_sell_market_order['status'])
+					else:
+						ordersCheck.append(new_sell_market_order['id'])
+						print(new_sell_market_order['status'])
+				except Exception as inst:
+					# Free lock to release next thread
+					print(inst)
+					threadLock.release()
+					return
 
-		# # If market goes down buy
-		# if changeLastPurchase[market] < -5.0 and buyAllowed[market] and changeLastPrice[market] > 0.1:
-		# 	quoteAsset = euroPairs[indexMarket[market]]['quote_currency']
+			else:
+				# Unsuccessful trade
+				transactionsAttempted += 1
 
-		# 	if not quoteAsset in indexCurrency:
-		# 		print('Currency not available: ' + market)
-		# 		threadLock.release()
-		# 		return
+		# If market goes down buy
+		if longAverage[market][-1] < shortAverage[market][-1] and longAverage[market][-2] > shortAverage[market][-2] and longAverage[market][-1] >= mediumAverage[market][-1] and buyAllowed[market]:
+			quoteAsset = euroPairs[indexMarket[market]]['quote_currency']
 
-		# 	available = float(my_accounts[indexCurrency[quoteAsset]]['available'])
+			if not quoteAsset in indexCurrency:
+				print('Currency not available: ' + market)
+				threadLock.release()
+				return
 
-		# 	if available > 5.0 and available != 0.0:
-		# 		# Create buy market order
-		# 		print('Buying: ' + market + ' ____ Amount: ' + str(5.00))
-		# 		try:
-		# 			new_buy_market_order = auth_client.place_market_order(product_id=market, side='buy', funds='5.00')
-		# 			print(new_buy_market_order['status'])
-		# 			print(new_buy_market_order)
-		# 			print(type(new_buy_market_order))
-		# 			if new_buy_market_order['status'] == 'done':
-		# 				print(new_buy_market_order['status'])
-		# 				purchasePrice[market] = lastPrices[market]
-		# 				buyAllowed[market] = False
-		# 				# Add successful trade
-		# 				transactionsDone += 1
-		# 			else:
-		# 				print(new_buy_market_order['status'])
-		# 				ordersCheck.append(new_buy_market_order['id'])
-		# 		except Exception as inst:
-		# 			# Free lock to release next thread
-		# 			print(inst)
-		# 			threadLock.release()
-		# 			return
+			available = float(my_accounts[indexCurrency[quoteAsset]]['available'])
 
-		# 	else:
-		# 		# Unsuccessful trade
-		# 		transactionsAttempted += 1
+			if available > 5.0 and available != 0.0:
+				# Create buy market order
+				print('Buying: ' + market + ' ____ Amount: ' + str(5.00))
+				try:
+					new_buy_market_order = auth_client.place_market_order(product_id=market, side='buy', funds='5.00')
+					print(new_buy_market_order['status'])
+					print(new_buy_market_order)
+					print(type(new_buy_market_order))
+					if new_buy_market_order['status'] == 'done':
+						print(new_buy_market_order['status'])
+						dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], lastPrices[market]), np.append(dataTrans[market][2], 'b')]
+						buyAllowed[market] = False
+						# Add successful trade
+						transactionsDone += 1
+					else:
+						print(new_buy_market_order['status'])
+						ordersCheck.append(new_buy_market_order['id'])
+				except Exception as inst:
+					# Free lock to release next thread
+					print(inst)
+					threadLock.release()
+					return
+
+			else:
+				# Unsuccessful trade
+				transactionsAttempted += 1
 
 		# Free lock to release next thread
 		threadLock.release()
@@ -395,10 +419,10 @@ def trade(t, markets, changePurchase, holding, changePrice, spread, transactions
 		if my_exchange_order['status'] == 'done':
 			if my_exchange_order['side'] == 'buy':
 				buyAllowed[my_exchange_order['product_id']] = False
-				dataTrans[check] = [np.append(dataTrans[check][0], currentTime), np.append(dataTrans[check][1], lastPrices[check]), np.append(dataTrans[check][0], 'b')]
+				dataTrans[check] = [np.append(dataTrans[check][0], currentTime), np.append(dataTrans[check][1], lastPrices[check]), np.append(dataTrans[check][2], 'b')]
 			else:
 				buyAllowed[my_exchange_order['product_id']] = True
-				dataTrans[check] = [np.append(dataTrans[check][0], currentTime), np.append(dataTrans[check][1], lastPrices[check]), np.append(dataTrans[check][0], 'b')]
+				dataTrans[check] = [np.append(dataTrans[check][0], currentTime), np.append(dataTrans[check][1], lastPrices[check]), np.append(dataTrans[check][2], 's')]
 			# Add successful tradde
 			transactionsDone += 1
 			print('transaction finished')
