@@ -356,3 +356,9 @@ config.py
 test.py
 test.ipynb
 testdata.npy
+
+# PyInstaller
+*.exe
+build/
+dist/
+controller.spec

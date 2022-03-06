@@ -1,3 +1,11 @@
+import requests
+import _ssl
+import ssl
+from io import StringIO  # Python3 use: from io import StringIO
+import sys
+# Direct output to terminal tab
+sys.stdout = mystdout = StringIO()
+
 from matplotlib.pyplot import style
 from numpy import indices
 from CoinbaseTrade import Coin
@@ -35,14 +43,21 @@ class niceChecking(QObject):
 	progress = pyqtSignal()
 	def run(self):
 		timeNow = (time() // checkingTime) + 1
+		try:
+			Nice.trade(timeNow, marketsNice, changePurchaseNice, holdingNice, changePriceNice, spreadNice, transactionsNice, True)
+		except Exception as inst:
+			print('Error when initializing tables and graphs')
+			print(inst)
+		self.progress.emit()
 		while(True):
 			sleep(0.1)
 			if time() // checkingTime >= timeNow:
 				print("Check NiceHash")
 				try:
 					Nice.trade(timeNow, marketsNice, changePurchaseNice, holdingNice, changePriceNice, spreadNice, transactionsNice)
-				except:
+				except Exception as inst:
 					print('Error NiceHash')
+					print(inst)
 				timeNow = (time() // checkingTime) + 1
 				self.progress.emit()
 
@@ -50,14 +65,21 @@ class coinChecking(QObject):
 	progress = pyqtSignal()
 	def run(self):
 		timeNow = (time() // checkingTime) + 1
+		try:
+			Coin.trade(timeNow, marketsCoin, changePurchaseCoin, holdingCoin, changePriceCoin, spreadCoin, transactionsCoin, True)
+		except Exception as inst:
+			print('Error when initializing tables and graphs')
+			print(inst)
+		self.progress.emit()
 		while(True):
 			sleep(0.1)
 			if time() // checkingTime >= timeNow:
 				print("Check Coinbase")
 				try:
 					Coin.trade(timeNow, marketsCoin, changePurchaseCoin, holdingCoin, changePriceCoin, spreadCoin, transactionsCoin)
-				except:
+				except Exception as inst:
 					print('Error Coinbase')
+					print(inst)
 				timeNow = (time() // checkingTime) + 1
 				self.progress.emit()
 
@@ -68,7 +90,7 @@ class updateUI(QObject):
 			sleep(0.1)
 			self.progress.emit()
 
-checkingTime = 300  # Check prices and trade if possible every minute
+checkingTime = 900  # Check prices and trade if possible every minute
 
 print("modules were imported")
 
@@ -81,10 +103,9 @@ class controllerWindow(qtw.QMainWindow):
 
 		style = self.style()
 
-		icon = style.standardIcon(qtw.QStyle.SP_MediaSeekForward)
 		self.tray_icon = qtw.QSystemTrayIcon()
-		self.tray_icon.setIcon(QtGui.QIcon(icon))
-		self.setWindowIcon(QtGui.QIcon(icon))
+		self.tray_icon.setIcon(QtGui.QIcon('btc-logo.png'))
+		self.setWindowIcon(QtGui.QIcon('btc-logo.png'))
 
 		# Restore the window when the tray icon is double clicked.
 		self.tray_icon.activated.connect(self.restore_window)
@@ -241,7 +262,10 @@ class controllerWindow(qtw.QMainWindow):
 			self.ui.transactions.setText(transactionsNice[i])
 		for i in range(len(transactionsCoin)):
 			self.ui.transactions_2.setText(transactionsCoin[i])
-	
+		
+		#Update terminal text
+		self.ui.terminalText.setText(mystdout.getvalue())
+
 	def niceTable(self):
 		# Update plots NiceHash
 		self.updatePlotsNice()
