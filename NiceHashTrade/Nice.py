@@ -51,7 +51,10 @@ def getTable(markets, changePurchase, holding, changePrice, spread):
 	for i in range(len(pairsBitcoin)):
 		key = pairsBitcoin[i]['symbol']
 		markets.append(key)
-		holding.append(not buyAllowed[key])
+		if key in buyAllowed:
+			holding.append(not buyAllowed[key])
+		else:
+			holding.append(False)
 		if key in changeLastPurchase:
 			changePurchase.append(changeLastPurchase[key])
 			changePrice.append(changeLastPrice[key])
@@ -281,7 +284,7 @@ class niceThread(threading.Thread):
 			return
 
 		# If market goes up sell
-		if mediumAverage[market][-1] > shortAverage[market][-1] and mediumAverage[market][-2] <= shortAverage[market][-2] and not buyAllowed[market] and mediumAverage[market][-1] >= longAverage[market][-1] and changeLastPurchase[market] > 1.0:
+		if mediumAverage[market][-1] > shortAverage[market][-1] and mediumAverage[market][-2] <= shortAverage[market][-2] and not buyAllowed[market] and mediumAverage[market][-1] >= longAverage[market][-1]: #  and changeLastPurchase[market] > 3.0
 			baseAsset = pairsBitcoin[indexMarket[market]]['baseAsset']
 
 			if not baseAsset in indexCurrency:
@@ -318,41 +321,41 @@ class niceThread(threading.Thread):
 				# Unsuccessful trade
 				transactionsAttempted += 1
 
-		# If market goes down buy
-		if longAverage[market][-1] < shortAverage[market][-1] and longAverage[market][-2] > shortAverage[market][-2] and longAverage[market][-1] >= mediumAverage[market][-1] and buyAllowed[market]:
-			quoteAsset = pairsBitcoin[indexMarket[market]]['quoteAsset']
+		# # If market goes down buy
+		# if longAverage[market][-1] < shortAverage[market][-1] and longAverage[market][-2] > shortAverage[market][-2] and longAverage[market][-1] >= mediumAverage[market][-1] and buyAllowed[market]:
+		# 	quoteAsset = pairsBitcoin[indexMarket[market]]['quoteAsset']
 
-			if not quoteAsset in indexCurrency:
-				print('Currency not available: ' + market)
-				threadLock.release()
-				return
+		# 	if not quoteAsset in indexCurrency:
+		# 		print('Currency not available: ' + market)
+		# 		threadLock.release()
+		# 		return
 
-			available = float(my_accounts['currencies'][indexCurrency[quoteAsset]]['available'])
-			minQuote = float(exchange_info['symbols'][indexMarket[market]]['secMinAmount'])
+		# 	available = float(my_accounts['currencies'][indexCurrency[quoteAsset]]['available'])
+		# 	minQuote = float(exchange_info['symbols'][indexMarket[market]]['secMinAmount'])
 
-			if available > 0.0001 and available != 0.0:
-				# Create buy market order
-				print('Buying: ' + market + ' ____ Amount: ' + str(0.0001))
-				try:
-					new_buy_market_order = private_api.create_exchange_buy_market_order(market, 0.0001)
-					print(new_buy_market_order['state'])
-					if new_buy_market_order['state'] == 'FULL':
-						dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], lastPrices[market]), np.append(dataTrans[market][2], 'b')]
-						buyAllowed[market] = False
-						# Add successful tradde
-						transactionsDone += 1
-					else:
-						marketsCheck.append(market)
-						print(new_buy_market_order['state'])
-				except Exception as inst:
-					# Free lock to release next thread
-					print(inst)
-					threadLock.release()
-					return
+		# 	if available > 0.0001 and available != 0.0:
+		# 		# Create buy market order
+		# 		print('Buying: ' + market + ' ____ Amount: ' + str(0.0001))
+		# 		try:
+		# 			new_buy_market_order = private_api.create_exchange_buy_market_order(market, 0.0001)
+		# 			print(new_buy_market_order['state'])
+		# 			if new_buy_market_order['state'] == 'FULL':
+		# 				dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], lastPrices[market]), np.append(dataTrans[market][2], 'b')]
+		# 				buyAllowed[market] = False
+		# 				# Add successful tradde
+		# 				transactionsDone += 1
+		# 			else:
+		# 				marketsCheck.append(market)
+		# 				print(new_buy_market_order['state'])
+		# 		except Exception as inst:
+		# 			# Free lock to release next thread
+		# 			print(inst)
+		# 			threadLock.release()
+		# 			return
 
-			else:
-				# Unsuccessful trade
-				transactionsAttempted += 1
+		# 	else:
+		# 		# Unsuccessful trade
+		# 		transactionsAttempted += 1
 
 		# Free lock to release next thread
 		threadLock.release()

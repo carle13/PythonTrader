@@ -4,7 +4,7 @@ import ssl
 from io import StringIO  # Python3 use: from io import StringIO
 import sys
 # Direct output to terminal tab
-sys.stdout = mystdout = StringIO()
+sys.stdout = sys.stderr = mystdout = StringIO()
 
 from matplotlib.pyplot import style
 from numpy import indices
