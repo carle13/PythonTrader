@@ -133,6 +133,10 @@ euroPairs = list(pairs[i] for i in range(len(pairs)) if pairs[i]['quote_currency
 
 # Get last prices
 lastPrices = dict()
+ask = dict()
+bid = dict()
+askVolume = dict()
+bidVolume = dict()
 
 
 #########################################

@@ -132,6 +132,10 @@ pairsBitcoin = list(exchange_info['symbols'][i] for i in range(len(exchange_info
 # Get last prices
 lastPrices = dict()
 # lastPrices = public_api.get_exchange_lastPrices()
+ask = dict()
+bid = dict()
+askVolume = dict()
+bidVolume = dict()
 
 
 #########################################
