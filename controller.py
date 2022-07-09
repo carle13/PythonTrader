@@ -264,7 +264,7 @@ class controllerWindow(qtw.QMainWindow):
 			self.ui.transactions_2.setText(transactionsCoin[i])
 		
 		#Update terminal text
-		self.ui.terminalText.setText(mystdout.getvalue())
+		self.ui.terminalText.setText(mystdout.getvalue()[-1000:])
 
 	def niceTable(self):
 		# Update plots NiceHash

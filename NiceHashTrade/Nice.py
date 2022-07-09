@@ -11,8 +11,31 @@ import config
 import common
 import matplotlib.pyplot as plt
 
+def getData(market):
+	global lastPrices
+	global ask
+	global bid
+	global askVolume
+	global bidVolume
+	# Get ask and bid
+	try:
+		sp = public_api.get_exchange_orderbook(market, 1)
+	except:
+		print('Error when getting orderbook')
+		return False
+	if 'sell' in sp and 'buy' in sp:
+		bid[market] = float(sp['sell'][0][0])
+		bidVolume[market] = float(sp['sell'][0][1])
+		ask[market] = float(sp['buy'][0][0])
+		askVolume[market] = float(sp['buy'][0][1])
+	else:
+		print(sp)
+		removeMarket(market)
+		return False
+	return True
+
 def saveData():
-	global pairsBitcoin
+	global btcPairs
 	global lastPrices
 	global currentTime
 	global dataHistoDict
@@ -23,16 +46,16 @@ def saveData():
 	file.close()
 
 	# Save historical data into different csv files
-	for i in range(len(pairsBitcoin)):
-		market = pairsBitcoin[i]['symbol']
+	for i in range(len(btcPairs)):
+		market = btcPairs[i]['symbol']
 		if market not in lastPrices:
-			# Get exchange market info
-			exchange_info = public_api.get_exchange_markets_info()
-			pairsBitcoin = list(exchange_info['symbols'][i] for i in range(len(exchange_info['symbols'])) if exchange_info['symbols'][i]['quoteAsset'] == 'BTC' and exchange_info['symbols'][i]['status'] == 'TRADING')
-			# Get indices for market symbols
-			indexMarket = dict()
-			for i in range(len(pairsBitcoin)):
-				indexMarket[pairsBitcoin[i]['symbol']] = i
+			# # Get exchange market info
+			# exchange_info = public_api.get_exchange_markets_info()
+			# pairsBitcoin = list(exchange_info['symbols'][i] for i in range(len(exchange_info['symbols'])) if exchange_info['symbols'][i]['quoteAsset'] == 'BTC' and exchange_info['symbols'][i]['status'] == 'TRADING')
+			# # Get indices for market symbols
+			# indexMarket = dict()
+			# for i in range(len(pairsBitcoin)):
+			# 	indexMarket[pairsBitcoin[i]['symbol']] = i
 			continue
 
 		np.save('NiceHashTrade/HistoricalData/historical' + market +'.npy', dataHistoDict[market])
@@ -48,8 +71,8 @@ def getTable(markets, changePurchase, holding, changePrice, spread):
 	holding.clear()
 	changePrice.clear()
 	spread.clear()
-	for i in range(len(pairsBitcoin)):
-		key = pairsBitcoin[i]['symbol']
+	for i in range(len(btcPairs)):
+		key = btcPairs[i]['symbol']
 		markets.append(key)
 		if key in buyAllowed:
 			holding.append(not buyAllowed[key])
@@ -65,26 +88,134 @@ def getTable(markets, changePurchase, holding, changePrice, spread):
 			spread.append(0.0)
 
 def plotBase(market, ax):
+	points = 30
 	ax.set_title('Market: ' + market)
 	ax.set_xlabel('Time')
 	ax.set_ylabel('Price')
 	if market not in dataHistoDict:
 		return
-	ax.plot(dataHistoDict[market][0], dataHistoDict[market][1], label='Last Price')
-	ax.plot(dataHistoDict[market][0][-len(shortAverage[market]):], shortAverage[market], label='Short Average')
-	ax.plot(dataHistoDict[market][0][-len(mediumAverage[market]):], mediumAverage[market], label='Medium Average')
-	ax.plot(dataHistoDict[market][0][-len(longAverage[market]):], longAverage[market], label='Long Average')
+	ax.plot(dataHistoDict[market][0][-points:], dataHistoDict[market][1][-points:], label='Last Price')
+	ax.plot(dataHistoDict[market][0][-len(shortAverage[market]):][-points:], shortAverage[market][-points:], label='Short Average')
+	ax.plot(dataHistoDict[market][0][-len(mediumAverage[market]):][-points:], mediumAverage[market][-points:], label='Medium Average')
+	ax.plot(dataHistoDict[market][0][-len(longAverage[market]):][-points:], longAverage[market][-points:], label='Long Average')
+	ax.plot(dataHistoDict[market][0][-points:], dataHistoDict[market][2][-points:], label='Ask')
+	ax.plot(dataHistoDict[market][0][-points:], dataHistoDict[market][3][-points:], label='Bid')
 	if market not in dataTrans:
 		return
 	buy = [[], []]
 	sell = [[], []]
-	buy[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b')
-	buy[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b')
-	sell[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's')
-	sell[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's')
+	buy[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b' and currentTime - dataTrans[market][0][i] <= points)
+	buy[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b' and currentTime - dataTrans[market][0][i] <= points)
+	sell[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's' and currentTime - dataTrans[market][0][i] <= points)
+	sell[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's' and currentTime - dataTrans[market][0][i] <= points)
 	ax.plot(buy[0], buy[1], 'o', label='Buys')
 	ax.plot(sell[0], sell[1], 'o', label='Sells')
 	ax.legend()
+
+def newMarket(market):
+	global btcPairs
+	global lastPrices
+	global ask
+	global bid
+	global askVolume
+	global bidVolume
+	global indexMarket
+	global indexCurrency
+	global currentTime
+	print('New market ' + str(market))
+	if market not in buyAllowed:
+		buyAllowed[market] = True
+	dataTrans[market] = np.array([np.array([currentTime]), np.array([lastPrices[market]]), np.array(['s'])], dtype=object)
+	dataHistoDict[market] = np.array([np.array([currentTime]), np.array(
+		[lastPrices[market]]), np.array([ask[market]]), np.array([bid[market]]), np.array([askVolume[market]]), np.array([bidVolume[market]])], dtype=object)
+
+def removeMarket(market):
+	global btcPairs
+	global lastPrices
+	global ask
+	global bid
+	global askVolume
+	global bidVolume
+	global indexMarket
+	global indexCurrency
+	print('Removing market ' +str(market))
+	try:
+		btcPairs.pop(indexMarket[market])
+	except:
+		print('Market was not in btcPairs')
+	lastPrices.pop(market, 0)
+	ask.pop(market, 0)
+	bid.pop(market, 0)
+	askVolume.pop(market, 0)
+	bidVolume.pop(market, 0)
+
+def buy(market):
+	global dataTrans
+	global buyAllowed
+	global ordersCheck
+	global currentTime
+	global ask
+	global bid
+	global transactionsAttempted
+	global transactionsDone
+	quoteAsset = btcPairs[indexMarket[market]]['quoteAsset']
+	available = float(my_accounts['currencies'][indexCurrency[quoteAsset]]['available'])
+	minQuote = float(exchange_info['symbols'][indexMarket[market]]['secMinAmount'])
+
+	if available > 0.0001 and available != 0.0:
+		# Create buy market order
+		print('Buying: ' + market + ' ____ Amount: ' + str(0.0001))
+		try:
+			new_buy_market_order = private_api.create_exchange_buy_market_order(market, 0.0001)
+			if new_buy_market_order['state'] == 'FULL':
+				dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], float(new_buy_market_order['price'])), np.append(dataTrans[market][2], 'b')]
+				buyAllowed[market] = False
+				# Add successful tradde
+				transactionsDone += 1
+			else:
+				marketsCheck.append(market)
+		except Exception as inst:
+			# Free lock to release next thread
+			print(inst)
+			return
+
+	else:
+		# Unsuccessful trade
+		transactionsAttempted += 1
+
+def sell(market):
+	global dataTrans
+	global buyAllowed
+	global ordersCheck
+	global currentTime
+	global ask
+	global bid
+	global transactionsAttempted
+	global transactionsDone
+	baseAsset = btcPairs[indexMarket[market]]['baseAsset']
+	available = float(my_accounts['currencies'][indexCurrency[baseAsset]]['available'])
+	minBase = float(btcPairs[indexMarket[market]]['priMinAmount'])
+
+	if available > minBase and available != 0.0:
+		# Create sell market order
+		print('Selling: ' + market + ' ____ Amount: ' + str(available))
+		try:
+			new_sell_market_order = private_api.create_exchange_sell_market_order(
+				market, available)
+			if new_sell_market_order['state'] == 'FULL':
+				dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], float(new_sell_market_order['price'])), np.append(dataTrans[market][2], 's')]
+				buyAllowed[market] = True
+				# Add successful tradde
+				transactionsDone += 1
+			else:
+				marketsCheck.append(market)
+		except Exception as inst:
+			# Free lock to release next thread
+			print(inst)
+			return
+	else:
+		# Unsuccessful trade
+		transactionsAttempted += 1
 
 host = config.nicehost
 organisation_id = config.niceorganisation_id
@@ -127,7 +258,7 @@ my_accounts = private_api.get_accounts()
 # EXCHANGE
 # Get exchange market info
 exchange_info = public_api.get_exchange_markets_info()
-pairsBitcoin = list(exchange_info['symbols'][i] for i in range(len(exchange_info['symbols'])) if exchange_info['symbols'][i]['quoteAsset'] == 'BTC' and exchange_info['symbols'][i]['status'] == 'TRADING')
+btcPairs = list(exchange_info['symbols'][i] for i in range(len(exchange_info['symbols'])) if exchange_info['symbols'][i]['quoteAsset'] == 'BTC' and exchange_info['symbols'][i]['status'] == 'TRADING')
 
 # Get last prices
 lastPrices = dict()
@@ -147,8 +278,8 @@ try:
 	file.close()
 except:
 	buyAllowed = dict()
-	for i in range(len(pairsBitcoin)):
-		market = pairsBitcoin[i]['symbol']
+	for i in range(len(btcPairs)):
+		market = btcPairs[i]['symbol']
 		buyAllowed[market] = True
 
 # Read historical prices for the currencies
@@ -156,20 +287,20 @@ dataHistoDict = dict()
 shortAverage = dict()
 mediumAverage = dict()
 longAverage = dict()
-for i in range(len(pairsBitcoin)):
-	market = pairsBitcoin[i]['symbol']
+for i in range(len(btcPairs)):
+	market = btcPairs[i]['symbol']
 	try:
 		dataHistoDict[market] = np.load('NiceHashTrade/HistoricalData/historical' + market + '.npy', allow_pickle=True)
 		shortAverage[market] = common.calculate_ema(dataHistoDict[market][1], shortPeriod)
 		mediumAverage[market] = common.calculate_ema(dataHistoDict[market][1], mediumPeriod)
 		longAverage[market] = common.calculate_ema(dataHistoDict[market][1], longPeriod)
 	except:
-		print('New market: ' + market)
+		print('No data for market: ' + market)
 
 #Read transaction history
 dataTrans = dict()
-for i in range(len(pairsBitcoin)):
-	market = pairsBitcoin[i]['symbol']
+for i in range(len(btcPairs)):
+	market = btcPairs[i]['symbol']
 	try:
 		dataTrans[market] = np.load('NiceHashTrade/TransactionData/transactions' + market + '.npy', allow_pickle=True)
 	except:
@@ -186,8 +317,8 @@ spreadCurrencies = dict()
 
 # Get indices for market symbols
 indexMarket = dict()
-for i in range(len(pairsBitcoin)):
-	indexMarket[pairsBitcoin[i]['symbol']] = i
+for i in range(len(btcPairs)):
+	indexMarket[btcPairs[i]['symbol']] = i
 
 # Get indices for accounts
 indexCurrency = dict()
@@ -207,6 +338,10 @@ class niceThread(threading.Thread):
 		global transactionsDone
 		global my_accounts
 		global lastPrices
+		global ask
+		global bid
+		global askVolume
+		global bidVolume
 		global buyAllowed
 		global dataHistoDict
 		global spreadCurrencies
@@ -221,36 +356,29 @@ class niceThread(threading.Thread):
 		# Get lock to synchronize threads
 		threadLock.acquire()
 
-		# Price checking done in the main function
-
-		# Check if market is in last prices
-		if not market in lastPrices:
-			print('Market ' + market + ' not in lastPrices')
-			# Free lock to release next thread
+		# Last price checking done in the main function
+		# Get bid, ask and volumes
+		if not getData(market):
+			# Free lock and return
 			threadLock.release()
 			return
 
-		if not market in buyAllowed:
-			print('New market buyAllowed: ' + market)
-			buyAllowed[market] = True
-
-		if not market in dataTrans:
-			print('No transactions recorded before:' + market)
-			dataTrans[market] = np.array([np.array([currentTime]), np.array([lastPrices[market]]), np.array(['s'])], dtype=object)
-		elif len(dataTrans[market][0]) == 0:
-			print('No transactions recorded before:' + market)
-			dataTrans[market] = np.array([np.array([currentTime]), np.array([lastPrices[market]]), np.array(['s'])], dtype=object)
-		
+		# Check if the market is newly added
 		if not market in dataHistoDict:
-			print('New market in dataHist: ' + market)
-			dataHistoDict[market] = np.array([np.array([currentTime]), np.array([lastPrices[market]])], dtype=object)
-		else:
-			dataHistoDict[market] = [np.append(dataHistoDict[market][0], currentTime), np.append(dataHistoDict[market][1], lastPrices[market])]
+			newMarket(market)
+		
+		# Append data to historical price data
+		dataHistoDict[market] = [np.append(dataHistoDict[market][0], currentTime), np.append(
+			dataHistoDict[market][1], lastPrices[market]), np.append(dataHistoDict[market][2], ask[market]), np.append(dataHistoDict[market][3], bid[market]), np.append(dataHistoDict[market][4], askVolume[market]), np.append(dataHistoDict[market][5], bidVolume[market])]
 		if len(dataHistoDict[market][1]) > 500:
-			dataHistoDict[market] = [dataHistoDict[market][0][-500:], dataHistoDict[market][1][-500:]]
+			dataHistoDict[market] = [dataHistoDict[market][0][-500:],
+                dataHistoDict[market][1][-500:], dataHistoDict[market][2][-500:], dataHistoDict[market][3][-500:], dataHistoDict[market][4][-500:], dataHistoDict[market][5][-500:]]
 		shortAverage[market] = common.calculate_ema(dataHistoDict[market][1], shortPeriod)
 		mediumAverage[market] = common.calculate_ema(dataHistoDict[market][1], mediumPeriod)
 		longAverage[market] = common.calculate_ema(dataHistoDict[market][1], longPeriod)
+
+		# Calculate spread
+		spreadCurrencies[market] = (abs(bid[market] - ask[market]) / lastPrices[market]) * 100
 
 		# Get change since last purchase
 		changeLastPurchase[market] = ((lastPrices[market] - dataTrans[market][1][0]) / dataTrans[market][1][0]) * 100.0
@@ -261,15 +389,6 @@ class niceThread(threading.Thread):
 		else:
 			previousPrice = dataHistoDict[market][1][-1]
 		changeLastPrice[market] = ((lastPrices[market] - previousPrice) / previousPrice) * 100.0
-
-		# Calculate spread
-		try:
-			sp = public_api.get_exchange_orderbook(market, 1)
-		except:
-			print('Error when getting orderbook')
-			threadLock.release()
-			return
-		spreadCurrencies[market] = (abs(sp['buy'][0][0] - sp['sell'][0][0]) / lastPrices[market]) * 100
 
 		# check that is not a low fluidity pair
 		if spreadCurrencies[market] >= 0.5:
@@ -289,80 +408,27 @@ class niceThread(threading.Thread):
 
 		# If market goes up sell
 		if mediumAverage[market][-1] > shortAverage[market][-1] and mediumAverage[market][-2] <= shortAverage[market][-2] and not buyAllowed[market] and mediumAverage[market][-1] >= longAverage[market][-1]: #  and changeLastPurchase[market] > 3.0
-			baseAsset = pairsBitcoin[indexMarket[market]]['baseAsset']
-
+			# Check if there is an account for the base currency
+			baseAsset = btcPairs[indexMarket[market]]['baseAsset']
 			if not baseAsset in indexCurrency:
 				print('Currency not available: ' + market)
 				threadLock.release()
 				return
+			sell(market)
 
-			available = float(my_accounts['currencies'][indexCurrency[baseAsset]]['available'])
-			minBase = float(pairsBitcoin[indexMarket[market]]['priMinAmount'])
-
-			if available > minBase and available != 0.0:
-				# Create sell market order
-				print('Selling: ' + market + ' ____ Amount: ' + str(available))
-				print('Min amount: ' + str(minBase))
-				try:
-					new_sell_market_order = private_api.create_exchange_sell_market_order(
-						market, available)
-					print(new_sell_market_order['state'])
-					if new_sell_market_order['state'] == 'FULL':
-						dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], lastPrices[market]), np.append(dataTrans[market][2], 's')]
-						buyAllowed[market] = True
-						# Add successful tradde
-						transactionsDone += 1
-					else:
-						marketsCheck.append(market)
-						print(new_sell_market_order['state'])
-				except Exception as inst:
-					# Free lock to release next thread
-					print(inst)
-					threadLock.release()
-					return
-
-			else:
-				# Unsuccessful trade
-				transactionsAttempted += 1
-
-		# # If market goes down buy
-		# if longAverage[market][-1] < shortAverage[market][-1] and longAverage[market][-2] > shortAverage[market][-2] and longAverage[market][-1] >= mediumAverage[market][-1] and buyAllowed[market]:
-		# 	quoteAsset = pairsBitcoin[indexMarket[market]]['quoteAsset']
-
-		# 	if not quoteAsset in indexCurrency:
-		# 		print('Currency not available: ' + market)
-		# 		threadLock.release()
-		# 		return
-
-		# 	available = float(my_accounts['currencies'][indexCurrency[quoteAsset]]['available'])
-		# 	minQuote = float(exchange_info['symbols'][indexMarket[market]]['secMinAmount'])
-
-		# 	if available > 0.0001 and available != 0.0:
-		# 		# Create buy market order
-		# 		print('Buying: ' + market + ' ____ Amount: ' + str(0.0001))
-		# 		try:
-		# 			new_buy_market_order = private_api.create_exchange_buy_market_order(market, 0.0001)
-		# 			print(new_buy_market_order['state'])
-		# 			if new_buy_market_order['state'] == 'FULL':
-		# 				dataTrans[market] = [np.append(dataTrans[market][0], currentTime), np.append(dataTrans[market][1], lastPrices[market]), np.append(dataTrans[market][2], 'b')]
-		# 				buyAllowed[market] = False
-		# 				# Add successful tradde
-		# 				transactionsDone += 1
-		# 			else:
-		# 				marketsCheck.append(market)
-		# 				print(new_buy_market_order['state'])
-		# 		except Exception as inst:
-		# 			# Free lock to release next thread
-		# 			print(inst)
-		# 			threadLock.release()
-		# 			return
-
-		# 	else:
-		# 		# Unsuccessful trade
-		# 		transactionsAttempted += 1
+		# If market goes down buy
+		if longAverage[market][-1] < shortAverage[market][-1] and longAverage[market][-2] > shortAverage[market][-2] and longAverage[market][-1] >= mediumAverage[market][-1] and buyAllowed[market]:
+			# Check if there is an account for quote currency
+			quoteAsset = btcPairs[indexMarket[market]]['quoteAsset']
+			if not quoteAsset in indexCurrency:
+				print('Currency not available: ' + market)
+				threadLock.release()
+				return
+			#buy(market)
 
 		# Free lock to release next thread
 		threadLock.release()
+		return
 
 
 # Get balance for all currencies
@@ -373,15 +439,13 @@ lastPrices = public_api.get_exchange_lastPrices()
 def trade(t, markets, changePurchase, holding, changePrice, spread, transactions, ini=False):
 	global currentTime
 	currentTime = t
-	global pairsBitcoin
+	global btcPairs
 	global transactionsDone
 	global transactionsCancelled
 	global my_accounts
 	global lastPrices
 	global marketsCheck
-	print('#################################################################################')
-	print('Checking prices etc.')
-	l = len(pairsBitcoin)
+	l = len(btcPairs)
 	common.printProgressBar(0, l, prefix = 'Progress:', suffix = 'Complete', length = 25)
 
 	marketsCheck = []
@@ -406,8 +470,8 @@ def trade(t, markets, changePurchase, holding, changePrice, spread, transactions
 	threads = []
 
 	# Initialize threads
-	for i in range(len(pairsBitcoin)):
-		market = pairsBitcoin[i]['symbol']
+	for i in range(len(btcPairs)):
+		market = btcPairs[i]['symbol']
 		threads.append(niceThread(i, market))
 
 	for t in threads:
@@ -430,7 +494,6 @@ def trade(t, markets, changePurchase, holding, changePrice, spread, transactions
 			+ '\n' + progreso)
 	getTable(markets, changePurchase, holding, changePrice, spread)
 
-	print('Waiting for transactions to end')
 	time.sleep(5)
 
 	for check in marketsCheck:
