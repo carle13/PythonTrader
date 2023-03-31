@@ -10,6 +10,9 @@ from prettytable import PrettyTable
 import config
 import common
 import matplotlib.pyplot as plt
+import sys
+sys.path.append('../')
+from ArtificialIntelligenceTest import networkManager
 
 def getData(market):
 	global lastPrices
@@ -21,7 +24,7 @@ def getData(market):
 	try:
 		sp = public_api.get_exchange_orderbook(market, 1)
 	except:
-		print('Error when getting orderbook')
+		print('Error when getting orderbook'+market)
 		return False
 	if 'sell' in sp and 'buy' in sp:
 		bid[market] = float(sp['sell'][0][0])
@@ -59,9 +62,9 @@ def saveData():
 			continue
 
 		np.save('NiceHashTrade/HistoricalData/historical' + market +'.npy', dataHistoDict[market])
-
-		if dataTrans[market][0][0] < dataHistoDict[market][0][0]:
-			dataTrans[market] = [dataTrans[market][0][1:], dataTrans[market][1][1:], dataTrans[market][2][1:]]
+		if len(dataTrans[market][0]) > 1:
+			if dataTrans[market][0][0] < dataHistoDict[market][0][0]:
+				dataTrans[market] = [dataTrans[market][0][1:], dataTrans[market][1][1:], dataTrans[market][2][1:]]
 		np.save('NiceHashTrade/TransactionData/transactions' + market + '.npy', dataTrans[market])
 
 
@@ -88,28 +91,30 @@ def getTable(markets, changePurchase, holding, changePrice, spread):
 			spread.append(0.0)
 
 def plotBase(market, ax):
-	points = 30
+	points = 100
 	ax.set_title('Market: ' + market)
 	ax.set_xlabel('Time')
 	ax.set_ylabel('Price')
 	if market not in dataHistoDict:
 		return
 	ax.plot(dataHistoDict[market][0][-points:], dataHistoDict[market][1][-points:], label='Last Price')
-	ax.plot(dataHistoDict[market][0][-len(shortAverage[market]):][-points:], shortAverage[market][-points:], label='Short Average')
-	ax.plot(dataHistoDict[market][0][-len(mediumAverage[market]):][-points:], mediumAverage[market][-points:], label='Medium Average')
-	ax.plot(dataHistoDict[market][0][-len(longAverage[market]):][-points:], longAverage[market][-points:], label='Long Average')
+	# ax.plot(dataHistoDict[market][0][-len(shortAverage[market]):][-points:], shortAverage[market][-points:], label='Short Average')
+	# ax.plot(dataHistoDict[market][0][-len(mediumAverage[market]):][-points:], mediumAverage[market][-points:], label='Medium Average')
+	# ax.plot(dataHistoDict[market][0][-len(longAverage[market]):][-points:], longAverage[market][-points:], label='Long Average')
 	ax.plot(dataHistoDict[market][0][-points:], dataHistoDict[market][2][-points:], label='Ask')
 	ax.plot(dataHistoDict[market][0][-points:], dataHistoDict[market][3][-points:], label='Bid')
-	if market not in dataTrans:
-		return
-	buy = [[], []]
-	sell = [[], []]
-	buy[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b' and currentTime - dataTrans[market][0][i] <= points)
-	buy[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b' and currentTime - dataTrans[market][0][i] <= points)
-	sell[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's' and currentTime - dataTrans[market][0][i] <= points)
-	sell[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's' and currentTime - dataTrans[market][0][i] <= points)
-	ax.plot(buy[0], buy[1], 'o', label='Buys')
-	ax.plot(sell[0], sell[1], 'o', label='Sells')
+	if market in dataTrans:
+		buy = [[], []]
+		sell = [[], []]
+		buy[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b' and currentTime - dataTrans[market][0][i] <= points)
+		buy[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 'b' and currentTime - dataTrans[market][0][i] <= points)
+		sell[0] = list(dataTrans[market][0][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's' and currentTime - dataTrans[market][0][i] <= points)
+		sell[1] = list(dataTrans[market][1][i] for i in range(len(dataTrans[market][0])) if dataTrans[market][2][i] == 's' and currentTime - dataTrans[market][0][i] <= points)
+		ax.plot(buy[0], buy[1], 'o', label='Buys')
+		ax.plot(sell[0], sell[1], 'o', label='Sells')
+	if market in predictions:
+		ax.errorbar(predictions[market][0][:], predictions[market][1][:], yerr=predictions[market][3][:], label='Prediction Ask', capsize=5.0)
+		ax.errorbar(predictions[market][0][:], predictions[market][2][:], yerr=predictions[market][4][:], label='Prediction Bid', capsize=5.0)
 	ax.legend()
 
 def newMarket(market):
@@ -125,7 +130,7 @@ def newMarket(market):
 	print('New market ' + str(market))
 	if market not in buyAllowed:
 		buyAllowed[market] = True
-	dataTrans[market] = np.array([np.array([currentTime]), np.array([lastPrices[market]]), np.array(['s'])], dtype=object)
+	dataTrans[market] = np.array([np.array([], dtype=type(currentTime)), np.array([], dtype=type(lastPrices[market])), np.array([], dtype=type('s'))], dtype=object)
 	dataHistoDict[market] = np.array([np.array([currentTime]), np.array(
 		[lastPrices[market]]), np.array([ask[market]]), np.array([bid[market]]), np.array([askVolume[market]]), np.array([bidVolume[market]])], dtype=object)
 
@@ -232,7 +237,7 @@ marketsCheck = []
 
 shortPeriod = 2
 mediumPeriod = 10
-longPeriod = 20
+longPeriod = 48
 
 threadLock = threading.Lock()
 
@@ -315,6 +320,12 @@ changeLastPrice = dict()
 # Variable to calculate the spread of the orderbook
 spreadCurrencies = dict()
 
+# Create dictionary to store neural network predictions
+predictions = dict()
+
+# Create dictionary to hold manager of networks
+networks = dict()
+
 # Get indices for market symbols
 indexMarket = dict()
 for i in range(len(btcPairs)):
@@ -370,9 +381,10 @@ class niceThread(threading.Thread):
 		# Append data to historical price data
 		dataHistoDict[market] = [np.append(dataHistoDict[market][0], currentTime), np.append(
 			dataHistoDict[market][1], lastPrices[market]), np.append(dataHistoDict[market][2], ask[market]), np.append(dataHistoDict[market][3], bid[market]), np.append(dataHistoDict[market][4], askVolume[market]), np.append(dataHistoDict[market][5], bidVolume[market])]
-		if len(dataHistoDict[market][1]) > 500:
-			dataHistoDict[market] = [dataHistoDict[market][0][-500:],
-                dataHistoDict[market][1][-500:], dataHistoDict[market][2][-500:], dataHistoDict[market][3][-500:], dataHistoDict[market][4][-500:], dataHistoDict[market][5][-500:]]
+		dataStore = 2000
+		if len(dataHistoDict[market][1]) > dataStore:
+			dataHistoDict[market] = [dataHistoDict[market][0][-dataStore:],
+                dataHistoDict[market][1][-dataStore:], dataHistoDict[market][2][-dataStore:], dataHistoDict[market][3][-dataStore:], dataHistoDict[market][4][-dataStore:], dataHistoDict[market][5][-dataStore:]]
 		shortAverage[market] = common.calculate_ema(dataHistoDict[market][1], shortPeriod)
 		mediumAverage[market] = common.calculate_ema(dataHistoDict[market][1], mediumPeriod)
 		longAverage[market] = common.calculate_ema(dataHistoDict[market][1], longPeriod)
@@ -381,7 +393,10 @@ class niceThread(threading.Thread):
 		spreadCurrencies[market] = (abs(bid[market] - ask[market]) / lastPrices[market]) * 100
 
 		# Get change since last purchase
-		changeLastPurchase[market] = ((lastPrices[market] - dataTrans[market][1][0]) / dataTrans[market][1][0]) * 100.0
+		if len(dataTrans[market][1]) > 0:
+			changeLastPurchase[market] = ((lastPrices[market] - dataTrans[market][1][-1]) / dataTrans[market][1][-1]) * 100.0
+		else:
+			changeLastPurchase[market] = 0.0
 
 		#Get change since last 10 prices
 		if len(dataHistoDict[market][1]) > 10:
@@ -391,20 +406,42 @@ class niceThread(threading.Thread):
 		changeLastPrice[market] = ((lastPrices[market] - previousPrice) / previousPrice) * 100.0
 
 		# check that is not a low fluidity pair
-		if spreadCurrencies[market] >= 0.5:
+		if spreadCurrencies[market] >= 0.30:
 			threadLock.release()
 			return
 
 		# check that there is continuous data
 		if len(dataHistoDict[market][0]) >= longPeriod+1:
 			if dataHistoDict[market][0][-1] - dataHistoDict[market][0][-(longPeriod+1)] > longPeriod+1:
-				print('Insufficient data to trade: ' + market)
 				threadLock.release()
 				return
 		else:
-			print('Insufficient data to trade: ' + market)
 			threadLock.release()
 			return
+
+		# machine learning
+		if market not in networks:
+			try:
+				networks[market] = networkManager.NeuralNetwork(market, dataHistoDict[market])
+			except Exception as inst:
+				print('Error when creating network for '+market)
+				print(inst)
+				threadLock.release()
+				return
+
+		# Get predictions from the network
+		askpred, bidpred, askdev, biddev = networks[market].predict(dataHistoDict[market])
+		if market in predictions:
+			predictions[market] = [np.append(predictions[market][0], currentTime+7), np.append(
+				predictions[market][1], askpred), np.append(predictions[market][2], bidpred), np.append(predictions[market][3], askdev), np.append(predictions[market][4], biddev)]
+		else:
+			predictions[market] = np.array([np.array([currentTime+7]), np.array(
+				[askpred]), np.array([bidpred]), np.array([askdev]), np.array([biddev])], dtype=object)
+		
+		dataPreds = 48
+		if len(predictions[market][1]) > dataPreds:
+			predictions[market] = [predictions[market][0][-dataPreds:],
+				predictions[market][1][-dataPreds:], predictions[market][2][-dataPreds:], predictions[market][3][-dataPreds:], predictions[market][4][-dataPreds:]]
 
 		# If market goes up sell
 		if mediumAverage[market][-1] > shortAverage[market][-1] and mediumAverage[market][-2] <= shortAverage[market][-2] and not buyAllowed[market] and mediumAverage[market][-1] >= longAverage[market][-1]: #  and changeLastPurchase[market] > 3.0
@@ -445,7 +482,8 @@ def trade(t, markets, changePurchase, holding, changePrice, spread, transactions
 	global my_accounts
 	global lastPrices
 	global marketsCheck
-	l = len(btcPairs)
+	global predictions
+	l = len(btcPairs)+3
 	common.printProgressBar(0, l, prefix = 'Progress:', suffix = 'Complete', length = 25)
 
 	marketsCheck = []
@@ -479,14 +517,16 @@ def trade(t, markets, changePurchase, holding, changePrice, spread, transactions
 
 	i = 0
 	for t in threads:
-		progreso = common.printProgressBar(i + 1, l, prefix='Progress:', suffix='Complete', length=25)
-		i += 1
 		try:
 			t.join()
 		except Exception as inst:
 			print('Error in thread')
 			print(inst)
+			progreso = common.printProgressBar(i + 1, l, prefix='Progress:', suffix='Complete', length=25)
+			i += 1
 			continue
+		progreso = common.printProgressBar(i + 1, l, prefix='Progress:', suffix='Complete', length=25)
+		i += 1
 		transactions.clear()
 		# Print information
 		transactions.append('Transactions done: ' + str(transactionsDone) + '\nTransactions attempted: ' + str(
@@ -512,5 +552,28 @@ def trade(t, markets, changePurchase, holding, changePrice, spread, transactions
 			print('transaction being cancelled')
 			transactionsCancelled += 1
 			cancelled_order = private_api.cancel_exchange_order(check, my_exchange_orders[0]['orderId'])
-
+	progreso = common.printProgressBar(i + 1, l, prefix='Progress:', suffix='Complete', length=25)
+	i += 1
+	transactions.clear()
+	# Print information
+	transactions.append('Transactions done: ' + str(transactionsDone) + '\nTransactions attempted: ' + str(
+		transactionsAttempted) + '\nTransactions cancelled: ' + str(transactionsCancelled)
+		+ '\n' + progreso)
 	saveData()
+	progreso = common.printProgressBar(i + 1, l, prefix='Progress:', suffix='Complete', length=25)
+	i += 1
+	transactions.clear()
+	# Print information
+	transactions.append('Transactions done: ' + str(transactionsDone) + '\nTransactions attempted: ' + str(
+		transactionsAttempted) + '\nTransactions cancelled: ' + str(transactionsCancelled)
+		+ '\n' + progreso)
+	# Perform continual training of networks
+	for key in networks:
+		networks[key].train()
+	progreso = common.printProgressBar(i + 1, l, prefix='Progress:', suffix='Complete', length=25)
+	i += 1
+	transactions.clear()
+	# Print information
+	transactions.append('Transactions done: ' + str(transactionsDone) + '\nTransactions attempted: ' + str(
+		transactionsAttempted) + '\nTransactions cancelled: ' + str(transactionsCancelled)
+		+ '\n' + progreso)

@@ -52,7 +52,7 @@ class niceChecking(QObject):
 		while(True):
 			sleep(0.1)
 			if time() // checkingTime >= timeNow:
-				print("Check NiceHash")
+				print("Check NiceHash: "+str(timeNow))
 				try:
 					Nice.trade(timeNow, marketsNice, changePurchaseNice, holdingNice, changePriceNice, spreadNice, transactionsNice)
 				except Exception as inst:
@@ -74,7 +74,7 @@ class coinChecking(QObject):
 		while(True):
 			sleep(0.1)
 			if time() // checkingTime >= timeNow:
-				print("Check Coinbase")
+				print("Check Coinbase: "+str(timeNow))
 				try:
 					Coin.trade(timeNow, marketsCoin, changePurchaseCoin, holdingCoin, changePriceCoin, spreadCoin, transactionsCoin)
 				except Exception as inst:
@@ -264,7 +264,7 @@ class controllerWindow(qtw.QMainWindow):
 			self.ui.transactions_2.setText(transactionsCoin[i])
 		
 		#Update terminal text
-		self.ui.terminalText.setText(mystdout.getvalue()[-1000:])
+		self.ui.terminalText.setText(mystdout.getvalue()[-5000:])
 
 	def niceTable(self):
 		# Update plots NiceHash
@@ -299,7 +299,7 @@ class controllerWindow(qtw.QMainWindow):
 			
 			self.ui.TableData.setItem(i, 4, qtw.QTableWidgetItem(
 				str("{:.2f}".format(spreadNice[i]))+'%'))
-			if(spreadNice[i] <= 0.5):
+			if(spreadNice[i] <= 0.30):
 				self.ui.TableData.item(i, 4).setBackground(QtGui.QColorConstants.Green)
 			else:
 				self.ui.TableData.item(i, 4).setBackground(QtGui.QColorConstants.Red)
@@ -338,7 +338,7 @@ class controllerWindow(qtw.QMainWindow):
 
 			self.ui.TableData_2.setItem(i, 4, qtw.QTableWidgetItem(
 				str("{:.2f}".format(spreadCoin[i]))+'%'))
-			if(spreadCoin[i] <= 0.5):
+			if(spreadCoin[i] <= 0.10):
 				self.ui.TableData_2.item(i, 4).setBackground(QtGui.QColorConstants.Green)
 			else:
 				self.ui.TableData_2.item(i, 4).setBackground(QtGui.QColorConstants.Red)

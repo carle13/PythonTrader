@@ -1,61 +1,76 @@
-from numba.np.ufunc import parallel
 import numpy as np
-from numba import int8, int16, float32    # import the types
-from numba import njit, prange
-from numba.experimental import jitclass
-import struct
+import random
 
-def binary(num):
-	return ''.join('{:0>8b}'.format(c) for c in struct.pack('!f', num))
+from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import MinMaxScaler
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
 
-spec = [
-	('inputNeurons', float32[:, :]),
-	('activationsInput', int8[:, :, :]),
-	('connectionsInput', int16[:, :, :]),
-	('middle', float32[:, :]),
-	('activationsMiddle', int8[:, :, :]),
-	('connectionsMiddle', int16[:, :, :]),
-	('outputNeurons', float32[:, :]),
-]
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-@jitclass(spec)
-class Network(object):
-	def __init__(self, numConnections, numInput, bitsInput, sizeMiddle, numLayers, numOutput, bitsOutput):
-		self.inputNeurons = np.zeros((numInput, bitsInput), dtype=np.float32)
-		self.activationsInput = np.zeros((numInput, bitsInput, numConnections), dtype=np.int8)
-		self.connectionsInput = np.zeros((numInput, bitsInput, numConnections), dtype=np.int16)
-		self.middle = np.zeros((numLayers, sizeMiddle), dtype=np.float32)
-		self.activationsMiddle = np.zeros((numLayers, sizeMiddle, numConnections), dtype=np.int8)
-		self.connectionsMiddle = np.zeros((numLayers, sizeMiddle, numConnections), dtype=np.int16)
-		self.outputNeurons = np.zeros((numOutput, bitsOutput), dtype=np.float32)
+# Here we define our model as a class
+class LSTM(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers, output_dim):
+        super(LSTM, self).__init__()
+        # Hidden dimensions
+        self.hidden_dim = hidden_dim
 
-	def inputVals(self):
-		return self.inputNeurons
-	
-	# @njit(parallel=True)
-	def giveInput(self, inputNums):
-		print(inputNums)
-		for i in prange(len(inputNums)):
-			for b in prange(len(inputNums[i])):
-				if inputNums[i, b] == '1':
-					self.inputNeurons[i, b] = 100.0
-				else:
-					self.inputNeurons[i, b] = 0.0
+        # Number of hidden layers
+        self.num_layers = num_layers
 
-	def increment(self, val):
-		for i in range(self.size):
-				self.array[i] += val
-		return self.array
+        # batch_first=True causes input/output tensors to be of shape
+        # (batch_dim, seq_dim, feature_dim)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
 
-	@staticmethod
-	def add(x, y):
-		return x + y
+        # Readout layer
+        self.fc = nn.Linear(hidden_dim, output_dim)
 
-mybag = Network(300, 100, 16, 1000, 20, 10, 16)
-inputs = []
-for i in range(16):
-	inputs.append(binary(float32(3.0)))
+    def forward(self, x):
+        # Initialize hidden state with zeros
+        h0 = torch.randn(self.num_layers, x.size(0), self.hidden_dim).requires_grad_().to(device)
 
-print(inputs)
-mybag.giveInput(inputs)
-print(mybag.inputVals())
+        # Initialize cell state
+        c0 = torch.randn(self.num_layers, x.size(0), self.hidden_dim).requires_grad_().to(device)
+
+        # We need to detach as we are doing truncated backpropagation through time (BPTT)
+        # If we don't, we'll backprop all the way to the start even after going through another batch
+        out, (hn, cn) = self.lstm(x, (h0.detach(), c0.detach()))
+
+        # Index hidden state of last time step
+        # out.size() --> 100, 32, 100
+        # out[:, -1, :] --> 100, 100 --> just want last time step hidden states! 
+        out = self.fc(out[:, -1, :]) 
+        # out.size() --> 100, 10
+        return out
+
+# Here we define our model as a class
+class RNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers, output_dim):
+        super(RNN, self).__init__()
+        # Hidden dimensions
+        self.hidden_dim = hidden_dim
+
+        # Number of hidden layers
+        self.num_layers = num_layers
+
+        # batch_first=True causes input/output tensors to be of shape
+        # (batch_dim, seq_dim, feature_dim)
+        self.rnn = nn.RNN(input_dim, hidden_dim, num_layers, batch_first=True)
+
+        # Readout layer
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        # Initialize hidden state with zeros
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).requires_grad_().to(device)
+
+        # We need to detach as we are doing truncated backpropagation through time (BPTT)
+        # If we don't, Rl backprop all the way to the start even after going through another batch
+        out, (hn) = self.rnn(x, (h0.detach()))
+        # rnnndex(hidden stat) of last time step
+        # out.size() --> 100, 32, 100
+        # out[:, -1, :] --> 100, 100 --> just want last time step hidden states! 
+        out = self.fc(out[:, -1, :]) 
+        # out.size() --> 100, 10
+        return out
