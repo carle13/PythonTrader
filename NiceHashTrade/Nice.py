@@ -91,7 +91,7 @@ def getTable(markets, changePurchase, holding, changePrice, spread):
 			spread.append(0.0)
 
 def plotBase(market, ax):
-	points = 100
+	points = 50
 	ax.set_title('Market: ' + market)
 	ax.set_xlabel('Time')
 	ax.set_ylabel('Price')
@@ -381,7 +381,7 @@ class niceThread(threading.Thread):
 		# Append data to historical price data
 		dataHistoDict[market] = [np.append(dataHistoDict[market][0], currentTime), np.append(
 			dataHistoDict[market][1], lastPrices[market]), np.append(dataHistoDict[market][2], ask[market]), np.append(dataHistoDict[market][3], bid[market]), np.append(dataHistoDict[market][4], askVolume[market]), np.append(dataHistoDict[market][5], bidVolume[market])]
-		dataStore = 2000
+		dataStore = 4000
 		if len(dataHistoDict[market][1]) > dataStore:
 			dataHistoDict[market] = [dataHistoDict[market][0][-dataStore:],
                 dataHistoDict[market][1][-dataStore:], dataHistoDict[market][2][-dataStore:], dataHistoDict[market][3][-dataStore:], dataHistoDict[market][4][-dataStore:], dataHistoDict[market][5][-dataStore:]]
@@ -406,18 +406,18 @@ class niceThread(threading.Thread):
 		changeLastPrice[market] = ((lastPrices[market] - previousPrice) / previousPrice) * 100.0
 
 		# check that is not a low fluidity pair
-		if spreadCurrencies[market] >= 0.30:
+		if spreadCurrencies[market] >= 0.30 and not buyAllowed:
 			threadLock.release()
 			return
 
-		# check that there is continuous data
-		if len(dataHistoDict[market][0]) >= longPeriod+1:
-			if dataHistoDict[market][0][-1] - dataHistoDict[market][0][-(longPeriod+1)] > longPeriod+1:
-				threadLock.release()
-				return
-		else:
-			threadLock.release()
-			return
+		# # check that there is continuous data
+		# if len(dataHistoDict[market][0]) >= longPeriod+1:
+		# 	if dataHistoDict[market][0][-1] - dataHistoDict[market][0][-(longPeriod+1)] > longPeriod+1:
+		# 		threadLock.release()
+		# 		return
+		# else:
+		# 	threadLock.release()
+		# 	return
 
 		# machine learning
 		if market not in networks:

@@ -25,6 +25,8 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
+print('Starting python trader')
+
 marketsNice = []
 changePurchaseNice = []
 holdingNice = []
