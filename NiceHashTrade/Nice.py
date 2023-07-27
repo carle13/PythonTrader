@@ -1,12 +1,8 @@
-from hmac import new
-from io import StringIO
 from NiceHashTrade import nicehash
 import numpy as np
-from os import system
 import json
 import threading
 import time
-from prettytable import PrettyTable
 import config
 import common
 import matplotlib.pyplot as plt
